@@ -7,7 +7,7 @@ import asyncio
 from settings import YTDLSource, ytdl
 from dotenv import load_dotenv
 from random import choice
-
+import validators
 
 #bot config
 client = commands.Bot(command_prefix='.')
@@ -20,7 +20,8 @@ load_dotenv()
 
 #lists
 status = ['Workin']
-queue = []
+player_args = []
+queue=[]
 
 #management commands
 @client.event
@@ -35,7 +36,7 @@ async def exit(ctx):
     await client.close()
 
 #music commands
-@client.command(name='join')
+@client.command(aliases=["j"])
 async def join(ctx):
     if not ctx.message.author.voice:
         await ctx.send("Not connected to channel")
@@ -44,45 +45,81 @@ async def join(ctx):
         channel = ctx.message.author.voice.channel
     await channel.connect()
 
-@client.command(name='leave')
+@client.command(aliases=["l"])
 async def leave(ctx):
     voice_client = ctx.message.guild.voice_client
     await voice_client.disconnect()
 
-@client.command(name='play')
+@client.command(aliases=["p"])
 async def play(ctx):
-    global queue
+    global player_args
     server = ctx.message.guild
     voice_channel = server.voice_client
-    async with ctx.typing():
-        player, duration, videoIdExt = await YTDLSource.from_url(queue[0], loop=client.loop)
-        voice_channel.play(player, after=lambda e: print('Player error: %s' % e) if e else None)
-    await ctx.send('**Now playing:** {}'.format(player.title))
-    del(queue[0])
-    await asyncio.sleep(duration)
-    os.remove("files/"+videoIdExt)
-    if len(queue)>0:
+    if validators.url(player_args[0]):
+        async with ctx.typing():
+            player, duration, videoIdExt = await YTDLSource.from_url(player_args[0], loop=client.loop)
+            voice_channel.play(player, after=lambda e: print('error: %s' % e) if e else None)
+        await ctx.send('Now playing: {}'.format(player.title))
+        del(player_args[0])
+        await asyncio.sleep(duration)
+        os.remove("files/"+videoIdExt)
+        if len(player_args)>0:
+            play(ctx)
+    else:
+        async with ctx.typing():
+            player, duration, videoIdExt = await YTDLSource.from_search(player_args[0], loop=client.loop)
+            voice_channel.play(player, after=lambda e: print('error: %s' % e) if e else None)
+        await ctx.send('Now playing: {}'.format(player.title))
+        del(player_args[0])
+        await asyncio.sleep(duration)
+        os.remove("files/"+videoIdExt)
+        if len(player_args)>0:
+            play(ctx)
+
+
+@client.command(aliases=["n"])
+async def skip(ctx):
+    server = ctx.message.guild
+    voice_channel = server.voice_client
+    voice_channel.stop()
+    if queue>0:
         play(ctx)
 
-@client.command(name='queue')
-async def queue_(ctx, url):
-    global queue
-    queue.append(url)
-    await ctx.send(f'`{url}` added to queue!')
+@client.command(aliases=["v"])
+async def view(ctx):
+    await ctx.send(f'`{player_args}`')
+    
+@client.command(aliases=["q"])
+async def queue_(ctx, *, arg):
+    player_args.append(str(arg))
+    await ctx.send('Dodano')
 
-@client.command(name='remove')
+@client.command(aliases=["r"])
 async def remove(ctx, number):
-    global queue
     try:
-        del(queue[int(number)])
-        await ctx.send(f'Your queue is now `{queue}!`')
+        del(player_args[int(number)])
+        await ctx.send(f'`{player_args}`')
     except:
-        await ctx.send('Your queue is either **empty** or the index is **out of range**')
+        await ctx.send('empty')
+
+@client.command(aliases=["s"])
+async def stop(ctx):
+    server = ctx.message.guild
+    voice_channel = server.voice_client
+    voice_channel.stop()
 
 #clean up debug
-@client.command(name='delete')
+@client.command()
 async def delete(ctx, amount=5):
     await ctx.channel.purge(limit=amount+1)
+
+@client.command(aliases=['vol'])
+async def volume(ctx, number:int):
+    ctx.voice_client.source.volume=number/100
+
+@client.command(aliases=['thinking'])
+async def seek(ctx, number:int):
+    ffmpeg_options.update({'options': '-vn -ss '+str(number)})
 
 client.run(os.getenv('TOKEN'))
 

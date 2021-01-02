@@ -1,3 +1,4 @@
 prev.py
 .env
 /files
+/__pycache__
